@@ -16,14 +16,14 @@ app = FastAPI(
     description='FastApi 学习 新冠病毒疫情跟踪器API接口文档',
     version='1.0.0',
     docs_url='/docs',
-    redoc_url='/redocs'
+    redoc_url='/redoc'
 )
 
 # mount表示将某个目录下一个完全独立的应用挂载过来，这个不会在api交互文档中显示
 # 挂载静态目录，模板css等文件
 app.mount(path='/static', app=StaticFiles(directory='./static'), name='static')
 
-# @app.exception_handler(HTTPException)  #重新HTTPException异常处理器
+# @app.exception_handler(HTTPException)  #重写HTTPException异常处理器
 # async def http_exception_handler(request, exc):
 #     '''
 #     :param request: 这个参数不能省
