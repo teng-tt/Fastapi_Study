@@ -5,7 +5,7 @@
 
 import uvicorn
 from fastapi import FastAPI
-from fastapistudy import app03, app04, app05
+from fastapistudy import app03, app04, app05, app06
 from fastapi.staticfiles import StaticFiles
 # from fastapi.exceptions import RequestValidationError
 # from fastapi.responses import PlainTextResponse
@@ -45,6 +45,7 @@ app.mount(path='/static', app=StaticFiles(directory='./static'), name='static')
 app.include_router(app03, prefix='/chapter03', tags=['第三章 请求参数和验证'])
 app.include_router(app04, prefix='/chapter04', tags=['第四章 响应处理和FastAPI配置'])
 app.include_router(app05, prefix='/chapter05', tags=['第五章 FastAPI的依赖注入系统'])
+app.include_router(app06, prefix='/chapter06', tags=['第六章 安全认证和授权'])
 
 if __name__ == '__main__':
     '''
