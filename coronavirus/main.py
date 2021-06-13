@@ -2,12 +2,14 @@
 # -*- coding:utf-8 -*-
 # __author__ = "Teng"
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+import requests
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from coronavirus import crud, schemas
 from coronavirus.database import engin, Base, SessionLocal
 from coronavirus.models import City, Data
 from fastapi.templating import Jinja2Templates
+from pydantic import HttpUrl
 
 application = APIRouter()
 templates = Jinja2Templates(directory="./coronavirus/templates")
@@ -58,6 +60,44 @@ def get_data(city: str = None, skip: int = 0, limit: int = 100, db: Session = De
     data = crud.get_data(db=db, city=city, skip=skip, limit=limit)
     return data
 
+
+def bg_task(url: HttpUrl, db: Session):
+    """ 这里注意一个坑，不要在后台任务的参数汇总db: Session = Depends(get_db)这样导入依赖 """
+    city_data = requests.get(url=f"{url}?source=jhu&country_code=CN&timelines=false")
+
+    if 200 == city_data.status_code:
+        db.query(City).delete()
+        for localtion in city_data.json()["locations"]:
+            city = {
+                "province": localtion["province"],
+                "country": localtion["country"],
+                "country_code": "CN",
+                "country_population": localtion["country_population"],
+            }
+            crud.create_city(db=db, city=schemas.CreateCity(**city))
+
+    coronavirus_data = requests.get(url=f"{url}?source=jhu&country_code=CN&timelines=true")
+
+    if 200 == coronavirus_data.status_code:
+        db.query(Data).delete()
+        for city in coronavirus_data.json()["locations"]:
+            db_city = crud.get_city_by_name(db=db, city=city["province"])
+            for data, confirmed in city["timelines"]["confirmed"]["timeline"].items():
+                data = {
+                    "date": data.split("T")[0],  # 把'2020-12-31T00:00:00Z' 变为 '2020-12-31'
+                    "confirmed": confirmed,
+                    "deaths": city["timelines"]["deaths"]["timeline"][data],
+                    "recovered": 0 #每个城市每天有多少人痊愈，这种数据没有
+                }
+                crud.create_city_data(db=db, data=schemas.CreateData(**data), city_id=db_city.id)
+
+@application.get("/sync_coronavirus_data/jhu")
+def sync_coronavirus_data(background_task: BackgroundTasks, db: Session = Depends(get_db)):
+    """ 从Johns Hopkins University同步COVID-19数据 """
+    background_task.add_task(bg_task, "http://coronavirus-tracker-api.herokuapp.com/v2/locations", db)
+    return {"message": "正在同步数据......"}
+
+
 #前后端不分离的接口，使用模板引擎
 @application.get("/")
 def coronavirus(request: Request, city: str = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -65,5 +105,6 @@ def coronavirus(request: Request, city: str = None, skip: int = 0, limit: int = 
     return templates.TemplateResponse("home.html", {
         "request": request,
         "data": data,
-        "sync_data_url": "/sync_coronavirus_data/jhu"
+        "sync_data_url": "/coronavirus/sync_coronavirus_data/jhu"
     })
+
